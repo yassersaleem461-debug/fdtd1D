@@ -1,0 +1,14 @@
+# macOS
+.DS_Store
+
+# C++ build artifacts
+template
+*.o
+*.dSYM/
+
+# Jupyter temporary files
+.ipynb_checkpoints/
+
+# Generated simulation output
+RealspaceGrid.txt
+output/
