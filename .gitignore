@@ -5,7 +5,7 @@
 template
 *.o
 *.dSYM/
-
+*.txt
 # Jupyter temporary files
 .ipynb_checkpoints/
 
