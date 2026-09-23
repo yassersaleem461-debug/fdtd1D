@@ -18,13 +18,20 @@ constexpr double permiability_freespace = 1.25663706212e-6; // m kg s^-2 A^-2
 constexpr double light_speed = 299792458 ; // m/2
 constexpr double courant_number = 0.99; 
 using namespace std;
-vector<double> GenerateDiscreteGrid(double min,double max, int N)
+vector<double> GenerateDiscreteGrid(double min,double max, int N,double x_s, int& sourceindex)
 {
 	vector<double> Grid(N);
 	double delta = (max-min)/(N-1); // minus 1 to include the end point
+	double d=1e300;
+	sourceindex=-1;
 	for (int i=0;i<N;i++)
 	{
 		Grid[i] = min+delta*i;
+		if(abs(Grid[i]-x_s)<d)
+		{
+			d=abs(Grid[i]-x_s);
+			sourceindex=i;
+		}
 	}
 	return Grid;
 
@@ -35,28 +42,49 @@ double GaussianSource(double time, double amplitude, double width, double center
 	return amplitude*exp(-0.5*pow(u,2.0));
 }
 //To be written
-/*vector<double> StepWisePermitivitySpace(int Nx_grid, double x_I)
+vector<double> StepWisePermitivitySpace(vector<double> SpaceGrid, double x_I, double dx)
 {
-	double x_I=24;
-	vector<double> epsilon;
-	for (int i=0;i<Nx_grid;i++)
+	vector<double> epsilon(SpaceGrid.size());
+	for (int i=0;i<SpaceGrid.size();i++)
 	{
-		if()
-		epsilon=1;
+		double x = SpaceGrid[i];
+		if(x<x_I)
+			epsilon[i] = permitivity_freespace; // for now this is fine.
+		else
+			epsilon[i] = permitivity_freespace*pow(1.5,2.0);
+		
 	}
-}*/
-void WriteRealSpaceGrid(const string& S,const vector<double>& Grid )
+	return epsilon;
+}
+template <typename T>
+void WriteToFile(const string& S, const vector<T>& values)
 {
 	ofstream Write;
 	Write.open(S);
-	for(int i=0;i<Grid.size();i++)
-		Write << Grid[i]<<endl;
+	for(int i=0;i<values.size();i++)
+		Write << values[i]<<endl;
+}
+template <typename T>
+void WriteToFile(const string& S,const vector<vector<T>>& matrix)
+{
+	ofstream Write;
+	Write.open(S);
+	const int num_rows = matrix.size();
+	const int num_cols = matrix.empty() ? 0 : matrix[0].size();
+	for(int i=0;i<num_rows;i++)
+	{
+		for(int j=0;j<num_cols;j++)
+			Write << matrix[i][j]<<" ";
+		Write<<endl;
+	}
+
 }
 
 int main()
 {
 	const int Nx = 100;
 	const double x_I=24e-6; // micrometers interface point
+	const double x_s=8e-6;
 	const double n_dielectric=1.5;; //dielectric refractive index
 	const double x_Min =0; // Defines computational domain
 	const double x_Max=40e-6; // Defines computational domain
@@ -67,48 +95,50 @@ int main()
 	const double source_amplitude = 1.0;
 	const double source_width = 8e-15;
 	const double source_centre = 6.0 * source_width;
-	const int source_index=0; // for next time write function that determines source index from x_I, x_Max, and dx;
+	int source_index=0; // for next time write function that determines source index from x_I, x_Max, and dx;
 	cout << "Number of Grid points in x = "<<Nx <<endl;
 	cout << "Number of Grid points in t = "<<Nt <<endl;
 	vector<double> Ez(Nx, 0.0); //  for x, and t. // we need to define this at t=0 first
 	vector<double> Hy(Nx-1,0.0); //  for x, and t.
-	vector<vector<double>> FullE(Nx,Nt);
-	//vector<double> epsilon(Nx, permitivity_freespace);
-	//vector<double> mu(Nx-1,permiability_freespace); 
-	vector<double> SpaceGrid = GenerateDiscreteGrid(x_Min,x_Max,Nx); 
-	WriteRealSpaceGrid("RealspaceGrid.txt",SpaceGrid );
-	ofstream Write;
-	double mu = permiability_freespace;
-	double epsilon = permitivity_freespace; // must be intialized
-	for(int i=0;i<Nx;i++)
-		FullE[i][0]=Ez[i]; // save t=0 space field, is there a better way to do this?
+	vector<vector<double>> FullE(Nt+1,vector<double>(Nx,0.0));
+	vector<double> epsilon(Nx, permitivity_freespace);
+	vector<double> mu(Nx-1,permiability_freespace); 
 	
+	// Intiializations 
 
-	for(int n=0;n<Nt;n++)
-	{
-		
-		for(int i=0;i<Nx-1;i++)
+	vector<double> SpaceGrid = GenerateDiscreteGrid(x_Min,x_Max,Nx,x_s,source_index); // Define the real space grid.
+	cout << "Source Position in (micro meters) = "<< SpaceGrid[source_index]*1e6<<endl;
+	// Set the permitivities and permiabilities
+	epsilon = StepWisePermitivitySpace(SpaceGrid,  x_I,  dx);
+
+
+	WriteToFile("RealspaceGrid.txt",SpaceGrid );
+	WriteToFile("Epsilon_x.txt",epsilon);
+	ofstream Write;
+
+		FullE[0]=Ez; // save t=0 space field, is there a better way to do this?
+
+
+		for(int n=0;n<Nt;n++)
 		{
-			if(i*dx<x_I)
-			epsilon = permitivity_freespace; // for now this is fine.
-			else
-			epsilon = permitivity_freespace*pow(1.5,2.0);
-			Hy[i] = Hy[i] + (dt/(dx*mu))*(Ez[i+1] - Ez[i]);
+			double time = n*dt;
+			for(int i=0;i<Nx-1;i++)
+			{
 
-		}
-		for(int i=1;i<Nx;i++)
-		{
-			if(i*dx<x_I)
-			epsilon = permitivity_freespace; // for now this is fine.
-			else
-			epsilon = permitivity_freespace*pow(1.5,2.0);
-			Ez[i] = Ez[i] + (dt/(dx*epsilon))*(Hy[i+1] - Hy[i]);
+				Hy[i] = Hy[i] + (dt/(dx*mu[i]))*(Ez[i+1] - Ez[i]);
 
+			}
+			for(int i=1;i<Nx-1;i++)
+			{
+				Ez[i] = Ez[i] + (dt/(dx*epsilon[i]))*(Hy[i] - Hy[i-1]);
+
+			}
+			Ez[source_index] += GaussianSource( time,  source_amplitude, source_width, source_centre);
+			FullE[n+1] = Ez;
 		}
+
+		WriteToFile("FullEfield.txt",FullE);
+
+
+
 	}
-
-
-
-
-
-}
