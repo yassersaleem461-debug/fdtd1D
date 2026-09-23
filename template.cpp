@@ -42,10 +42,10 @@ double GaussianSource(double time, double amplitude, double width, double center
 	return amplitude*exp(-0.5*pow(u,2.0));
 }
 //To be written
-vector<double> StepWisePermitivitySpace(vector<double> SpaceGrid, double x_I, double dx)
+vector<double> StepWisePermitivitySpace(vector<double> SpaceGrid, double x_I)
 {
 	vector<double> epsilon(SpaceGrid.size());
-	for (int i=0;i<SpaceGrid.size();i++)
+	for (size_t i=0;i<SpaceGrid.size();i++)
 	{
 		double x = SpaceGrid[i];
 		if(x<x_I)
@@ -61,7 +61,7 @@ void WriteToFile(const string& S, const vector<T>& values)
 {
 	ofstream Write;
 	Write.open(S);
-	for(int i=0;i<values.size();i++)
+	for(size_t i=0;i<values.size();i++)
 		Write << values[i]<<endl;
 }
 template <typename T>
@@ -69,11 +69,11 @@ void WriteToFile(const string& S,const vector<vector<T>>& matrix)
 {
 	ofstream Write;
 	Write.open(S);
-	const int num_rows = matrix.size();
-	const int num_cols = matrix.empty() ? 0 : matrix[0].size();
-	for(int i=0;i<num_rows;i++)
+	const size_t num_rows = matrix.size();
+	const size_t num_cols = matrix.empty() ? 0 : matrix[0].size();
+	for(size_t i=0;i<num_rows;i++)
 	{
-		for(int j=0;j<num_cols;j++)
+		for(size_t j=0;j<num_cols;j++)
 			Write << matrix[i][j]<<" ";
 		Write<<endl;
 	}
@@ -82,10 +82,9 @@ void WriteToFile(const string& S,const vector<vector<T>>& matrix)
 
 int main()
 {
-	const int Nx = 100;
+	const int Nx = 400;
 	const double x_I=24e-6; // micrometers interface point
 	const double x_s=8e-6;
-	const double n_dielectric=1.5;; //dielectric refractive index
 	const double x_Min =0; // Defines computational domain
 	const double x_Max=40e-6; // Defines computational domain
 	double t_max=200e-15; // max time in seconds.
@@ -93,7 +92,7 @@ int main()
 	const double dt = courant_number*dx/light_speed; // from the so called Courant stability  (or CFL Courant–Friedrichs–Lewy condition)
 	const int Nt = ceil(t_max/dt);
 	const double source_amplitude = 1.0;
-	const double source_width = 8e-15;
+	const double source_width = 8e-15; 
 	const double source_centre = 6.0 * source_width;
 	int source_index=0; // for next time write function that determines source index from x_I, x_Max, and dx;
 	cout << "Number of Grid points in x = "<<Nx <<endl;
@@ -109,7 +108,7 @@ int main()
 	vector<double> SpaceGrid = GenerateDiscreteGrid(x_Min,x_Max,Nx,x_s,source_index); // Define the real space grid.
 	cout << "Source Position in (micro meters) = "<< SpaceGrid[source_index]*1e6<<endl;
 	// Set the permitivities and permiabilities
-	epsilon = StepWisePermitivitySpace(SpaceGrid,  x_I,  dx);
+	epsilon = StepWisePermitivitySpace(SpaceGrid,  x_I);
 
 
 	WriteToFile("RealspaceGrid.txt",SpaceGrid );
@@ -122,18 +121,22 @@ int main()
 		for(int n=0;n<Nt;n++)
 		{
 			double time = n*dt;
-			for(int i=0;i<Nx-1;i++)
+			for(size_t i=0;i<Nx-1;i++)
 			{
 
 				Hy[i] = Hy[i] + (dt/(dx*mu[i]))*(Ez[i+1] - Ez[i]);
 
 			}
-			for(int i=1;i<Nx-1;i++)
+			for(size_t i=1;i<Nx-1;i++)
 			{
 				Ez[i] = Ez[i] + (dt/(dx*epsilon[i]))*(Hy[i] - Hy[i-1]);
 
 			}
+			//Apply Source
 			Ez[source_index] += GaussianSource( time,  source_amplitude, source_width, source_centre);
+			//Apply Boundary condition
+			Ez.front()=0;
+			Ez.back()=0;
 			FullE[n+1] = Ez;
 		}
 
